@@ -1,0 +1,46 @@
+# Polygon.io API Connection Specification for BTC/USDT Trading Agents
+
+## 1. Authentication & Base URL
+- Base URL: https://api.polygon.io
+- Auth Method: URL Query Parameter (?apiKey=YOUR_API_KEY)
+- Target Asset: BTC/USDT (Polygon Ticker Format: X:BTCUSD)
+
+## 2. API Endpoints Required by Analyst Layer
+
+### [Tool 1] Technical Analyst: Aggregates (Bars) API
+- Purpose: Fetches historical/real-time 1-hour candle data to calculate Technical Metrics (RSI, Moving Averages).
+- Endpoint Format: /v2/aggs/ticker/{cryptoTicker}/range/{multiplier}/{timespan}/{from}/{to}
+- Example Request: 
+  https://api.polygon.io/v2/aggs/ticker/X:BTCUSD/range/1/hour/2026-05-01/2026-05-21?adjusted=true&sort=asc
+- Expected JSON Structure to Parse:
+  {
+    "ticker": "X:BTCUSD",
+    "results": [
+      { "v": 1245.45, "vw": 67200.5, "o": 67100.0, "c": 67350.5, "h": 67400.0, "l": 67050.0, "t": 1716292800000, "n": 4500 }
+    ]
+  }
+  (* Key Mapping: c=close, o=open, h=high, l=low, v=volume, t=timestamp *)
+
+### [Tool 2] Macro & Sentiment Analyst: Financial News API
+- Purpose: Fetches latest market-moving news and built-in sentiment scores for high-level market context.
+- Endpoint Format: /v2/reference/news
+- Example Request:
+  https://api.polygon.io/v2/reference/news?ticker=X:BTCUSD&limit=5
+- Expected JSON Structure to Parse:
+  {
+    "results": [
+      {
+        "title": "Crypto Markets React to Macro Liquidity Shift",
+        "published_utc": "2026-05-21T10:00:00Z",
+        "article_url": "https://...",
+        "insights": [
+          { "ticker": "X:BTCUSD", "sentiment": "bullish" }
+        ]
+      }
+    ]
+  }
+
+## 3. Pydantic Parsing Guidelines for LLM Efficiency
+- Do NOT pass raw JSON list to the LLM agent.
+- Extract only critical fields ('c', 'v', 't' for aggregates / 'title', 'sentiment' for news).
+- Convert into structural Markdown blocks before injecting into TradingState["analyst_reports"].

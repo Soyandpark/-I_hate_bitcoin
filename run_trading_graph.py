@@ -13,6 +13,10 @@ import os, sys, json, random, argparse
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
 
+# ── .env 로딩 (API 키 주입) ─────────────────────────────────────────────────
+from dotenv import load_dotenv
+load_dotenv()
+
 # 프로젝트 루트를 PYTHONPATH에 추가
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PROJECT_ROOT)
@@ -27,6 +31,16 @@ from graphs.trading_state import TradingState
 from graphs.graph_builder import build_trading_graph, print_graph_diagram
 from prompts.prompt_templates import DEFAULT_PROMPTS, build_cvrf_rules_str
 from agents.manager_nodes import node_hypothesis_agent
+from tools.logging_tools import (
+    log_node_transition,
+    log_tool_call,
+    log_analyst_report,
+    log_hypothesis,
+    log_risk_assessment,
+    log_final_decision,
+    log_episode_summary,
+    log_backtest_summary,
+)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -257,14 +271,13 @@ def run_single_episode(
     dry_run: bool = False,
 ) -> Dict[str, Any]:
     """단일 에피소드를 실행하고 결과를 반환한다."""
-    print(f"\n{'═'*60}")
-    print(f"▶ Episode [{episode_id}] 시작 — use_mock={use_mock}")
-    print(f"{'═'*60}")
+    import time
+    _t0 = time.time()
 
+    log_node_transition("START", "System", "Step-0")
     state = build_initial_state(df, use_mock=use_mock, episode_id=episode_id)
 
     if dry_run:
-        # LangGraph 없이 노드만 순차 호출 (LLM 미사용 빠른 테스트)
         print("[DRY RUN] Analyst + Manager 노드 순차 실행 (LLM 미호출)")
         from agents.analyst_nodes import (
             node_analyst_technical,
@@ -277,48 +290,90 @@ def run_single_episode(
             node_final_judgment,
         )
 
+        # ── Analyst Layer ────────────────────────────────────────────────────
+        log_node_transition("node_analyst_technical", "📊 Technical Analyst", "Step-1")
         state = node_analyst_technical(state)
+        _report_technical(state)
+
+        log_node_transition("node_analyst_macro", "📰 Macro Analyst", "Step-2")
         state = node_analyst_macro(state)
+        _report_macro(state)
+
+        log_node_transition("node_analyst_onchain", "⛓️ On-chain Analyst", "Step-3")
         state = node_analyst_onchain(state)
+        _report_onchain(state)
+
+        # ── Manager Layer ─────────────────────────────────────────────────────
+        log_node_transition("node_hypothesis_agent", "🔮 Hypothesis Agent", "Step-4")
         state = node_hypothesis_agent(state)
+        log_hypothesis(state.get("hypotheses", ""))
+
+        log_node_transition("node_investment_decision", "⚖️ Investment Decision Agent", "Step-5")
         state = node_investment_decision(state)
+        log_risk_assessment(state.get("risk_assessment", {}))
+
+        log_node_transition("node_final_judgment", "🎯 Final Judgment Agent", "Step-6")
         state = node_final_judgment(state)
+        _report_final(state)
     else:
-        # LangGraph 실행
         graph = build_trading_graph()
         state = graph.invoke(state)
 
-    # 결과 출력
-    decision_map = {0: "BUY 🟢", 1: "HOLD 🟡", 2: "SELL 🔴"}
-    action = state.get("final_decision", 1)
-    weight = state.get("position_weight", 0.0)
-    risk = state.get("risk_assessment", {})
+    # ══════════════════════════════════════════════════════════════════════════════
+# Helpers: Analyst Reasoning Logs
+# ══════════════════════════════════════════════════════════════════════════════
 
-    print(f"\n📊 Final Decision:  {decision_map[action]}")
-    print(f"   Position Weight: {weight:.2%}")
-    print(f"   Risk Level:      {risk.get('risk_level', 'N/A')}")
-    print(f"   CVaR:            {risk.get('cvar', 'N/A')}")
-    print(f"   ATR Stop %:      {risk.get('atr_stop_pct', 'N/A')}")
+import json as _json
 
-    # Analyst 레포트 요약
+
+def _parse_analyst_json(raw: str) -> tuple:
+    """Analyst JSON 파싱 — signal, confidence, report 추출"""
+    try:
+        p = _json.loads(raw)
+        return p.get("signal", "N/A"), p.get("confidence", 0.0), p.get("report", raw[:200])
+    except Exception:
+        return "N/A", 0.0, raw[:200]
+
+
+def _report_technical(state: TradingState) -> None:
     reports = state.get("analyst_reports", {})
-    for key, val in reports.items():
-        try:
-            parsed = json.loads(val)
-            sig = parsed.get("signal", "N/A")
-            conf = parsed.get("confidence", "N/A")
-            print(f"   [{key.upper():10s}] signal={sig}, confidence={conf}")
-        except json.JSONDecodeError:
-            print(f"   [{key.upper():10s}] (파싱 실패 또는 미실행)")
+    raw = reports.get("technical", "")
+    sig, conf, report = _parse_analyst_json(raw)
+    log_analyst_report("technical", report, sig, conf)
+
+
+def _report_macro(state: TradingState) -> None:
+    reports = state.get("analyst_reports", {})
+    raw = reports.get("macro", "")
+    sig, conf, report = _parse_analyst_json(raw)
+    log_analyst_report("macro", report, sig, conf)
+
+
+def _report_onchain(state: TradingState) -> None:
+    reports = state.get("analyst_reports", {})
+    raw = reports.get("onchain", "")
+    sig, conf, report = _parse_analyst_json(raw)
+    log_analyst_report("onchain", report, sig, conf)
+
+
+def _report_final(state: TradingState) -> None:
+    risk = state.get("risk_assessment", {})
+    action = state.get("final_decision", 1)
+    weight = state.get("position_weight", 0.5)
+    reasoning = risk.get("final_reasoning", "(미확인)")
+    log_final_decision(action, weight, reasoning, risk)
+
+    risk = state.get("risk_assessment", {})
 
     return {
         "episode_id": episode_id,
-        "final_decision": action,
-        "position_weight": weight,
+        "final_decision": state.get("final_decision", 1),
+        "position_weight": state.get("position_weight", 0.5),
         "risk_assessment": risk,
-        "analyst_reports": reports,
+        "analyst_reports": state.get("analyst_reports", {}),
         "hypotheses": state.get("hypotheses", ""),
         "state": state,
+        "duration_sec": time.time() - _t0,
     }
 
 
@@ -358,6 +413,16 @@ def run_backtest(
         all_results.append(result)
         all_actions.append(result["final_decision"])
 
+        # 에피소드 요약 로그
+        log_episode_summary(
+            episode_id=f"ep_{ep:03d}",
+            action=result["final_decision"],
+            weight=result["position_weight"],
+            risk_level=result["risk_assessment"].get("risk_level", "N/A"),
+            reports_keys=list(result["analyst_reports"].keys()),
+            duration_sec=result.get("duration_sec"),
+        )
+
     # ── 3-Action Backtest 평가 ─────────────────────────────────────────────
     # Mock price list for backtest evaluation
     prices_for_bt = generate_mock_ohlcv(n_bars=n_episodes * bars_per_episode)
@@ -376,10 +441,10 @@ def run_backtest(
         trading_fee=TRADING_FEE,
     )
 
-    print(f"\n{'═'*60}")
-    print("📈 Multi-Episode 백테스트 결과")
-    print_result(bt_result)
-    print(f"  에피소드별 행동: {all_actions}")
+    log_backtest_summary({
+        "backtest_result": bt_result,
+        "all_actions": all_actions,
+    })
 
     return {
         "episode_results": all_results,

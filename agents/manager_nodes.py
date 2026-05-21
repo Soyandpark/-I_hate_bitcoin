@@ -1,16 +1,19 @@
 """
-Manager Layer — 3단계 순차 에이전트 노드 (LangGraph Node 함수)
+Manager Layer -- 3단계 순차 에이전트 노드 (LangGraph Node 함수)
   1. Hypothesis Agent       : 강세/약세 시나리오 도출
   2. Investment Decision Agent : risk_tools 기반 CVaR/ATR 리스크 제어 + 비중 조절
   3. Final Judgment Agent   : 환각 검증 후 final_decision(0|1|2) + position_weight 최종 결정
 
 각 노드는 TradingState를 입력받아 수정할 필드만 반환하는 순수 함수이다.
 
-⚠️ ChatAnthropic은 지연 로딩(lazy init) — API 키 없으면 Mock 응답 반환
+⚠️ ChatAnthropic은 지연 로딩(lazy init) -- API 키 없으면 Mock 응답 반환
 """
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import json
 import re
-import os
 import random
 from typing import Dict, Any
 

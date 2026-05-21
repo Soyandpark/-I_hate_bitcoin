@@ -12,3 +12,5 @@ optuna==4.8.0
 pytrends==4.9.2
 stockstats==0.6.8
 requests==2.32.3
+rich==13.7.1
+python-dotenv==1.0.1
