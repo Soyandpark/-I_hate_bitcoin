@@ -11,8 +11,46 @@ Technical Analyst → get_polygon_aggregates (1시간봉 + 마크다운)
 Macro Analyst → get_polygon_news (BTC/USD 최신 뉴스)
 On-chain Analyst → get_recent_news_yfinance (yfinance로)
 
-핵심 변경 사항은 agent 폴더, tools 폴더
+# Architecture
+Trading State (graphs/trading_state.py)
+TypedDict that flows through the entire LangGraph pipeline. Key fields:
 
+base_predictions: LGBM/Chronos prediction results
+analyst_reports: {"technical", "macro", "onchain"} reports
+hypotheses: Bull/Bear scenarios from Hypothesis Agent
+risk_assessment: CVaR, ATR metrics
+final_decision: 0=Buy, 1=Hold, 2=Sell
+episodic_memory: CVRF learning results (profitable_rules, losing_rules)
+Agent Layer (agents/)
+analyst_nodes.py: 3 parallel nodes → node_analyst_technical, node_analyst_macro, node_analyst_onchain
+manager_nodes.py: 3 sequential nodes → node_hypothesis_agent, node_investment_decision, node_final_judgment, node_cvrf_update
+All nodes are pure functions: input TradingState → return dict of fields to update.
+
+Graph Builder (graphs/graph_builder.py)
+build_trading_graph() assembles the full LangGraph pipeline with conditional edges:
+
+On-demand inference routing (cache vs re-run)
+Risk-level conditional routing (HIGH risk → Final Judgment with override)
+CVRF update on episode end
+Prompts (prompts/prompt_templates.py)
+System prompts for all 6 agents (analysts + managers + CVRF)
+build_cvrf_rules_str() injects episodic memory into prompts
+build_agent_system_prompt() assembles agent prompt with CVRF rules
+RISK_THRESHOLDS: cvar_max=0.15, atr_multiplier=2.0
+Risk Tools (tools/risk_tools.py)
+calculate_atr(), calculate_cvar(): core risk metrics
+assess_overall_risk(): combines CVaR + ATR into risk_level (HIGH/NORMAL)
+should_trigger_on_demand(): decides when to re-run base predictor (volatility break, signal conflict, uncertainty threshold)
+CVRF (agents/manager_nodes.py - node_cvrf_update)
+Meta-learning node that analyzes portfolio values + trade logs after each episode. Outputs:
+
+new_rules: conceptual patterns to inject into agent prompts
+tau: learning rate (decision overlap between episodes)
+Updates TradingState["current_prompts"] for next episode
+Mock LLM Responses
+agents/manager_nodes.py and agents/analyst_nodes.py use lazy loading for ChatAnthropic. If ANTHROPIC_API_KEY is not set, they return mock JSON responses — allowing local testing without API access.
+
+# 문제점
 (1) 현재 json 파일 변환 및 바로 모델에 입력해주고자 했으나(chronos, lgbm)  이 부분은 코드 변경이 더 필요함.(run_trading_graph.py)
 (2) 로컬에서 polygon api key(free) 가져와서 data collector polygon.py 실행하면 json 실행되나 rolling window가 최대 2년까지이고 maxPage를 늘려서 시간 소모가 매우 오래 걸림 (time.sleep(12) - api 제한?) datasets/ 에 crawling X:BTCUSD만 조회하면 바로 저장되진 않았음(2026년 5월임에도)
 다른 자잘한 종목들이 조회되긴 함(GOOGL등)
