@@ -8,6 +8,8 @@ BTC/USDT 1시간봉 기반 3-class 분류 트레이딩 시스템
 다른 자잘한 종목들이 조회되긴 함
 
 
+aggregates랑 news 두 개를 제공, news -> json하고 agent가 dry run 안하면 json 참조해 판단에 사용(tools) 후 판단 결과를 제공함. (trading agent 형태)
+
 Project Overview
 BTC/USDT 1-hour trading system with a dual-layer LangGraph agent architecture:
 
