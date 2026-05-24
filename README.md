@@ -5,8 +5,10 @@ BTC/USDT 1시간봉 기반 3-class 분류 트레이딩 시스템
 핵심 변경 사항은 agent 폴더, tools 폴더
 (1) 현재 json 파일 변환 및 바로 모델에 입력해주고자 했으나(chronos, lgbm)  이 부분은 코드 변경이 더 필요함.(run_trading_graph.py)
 (2) 로컬에서 polygon api key(free) 가져와서 data collector polygon.py 실행하면 json 실행되나 rolling window가 최대 2년까지이고 maxPage를 늘려서 시간 소모가 매우 오래 걸림 (time.sleep(12) - api 제한?) datasets/ 에 crawling X:BTCUSD만 조회하면 바로 저장되진 않았음(2026년 5월임에도)
-다른 자잘한 종목들이 조회되긴 함
+다른 자잘한 종목들이 조회되긴 함(GOOGL등)
 
+그래서 사실 사용하려면 조회한다음에 bitcoin 들어간 단어를 찾아야 할 거 같은데...ㅠㅠㅠㅠ
+tools구조랑 외부 api 가져오는 agent 는 구현되긴 했어요...
 
 aggregates랑 news 두 개를 제공, news -> json하고 agent가 dry run 안하면 json 참조해 판단에 사용(tools) 후 판단 결과를 제공함.(run_trading_graph.py) (trading agent 형태)
 
