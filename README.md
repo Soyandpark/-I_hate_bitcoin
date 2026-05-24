@@ -184,13 +184,44 @@ langchain-anthropic — LLM calls (lazy import)
     └→ from dotenv import load_dotenv → load_dotenv()
         └→ .env 읽어서 os.environ["POLYGON_API_KEY"], ["OPENAI_API_KEY"] 자동 주입
 
-  테스트 결과 (실제 API 키로 live 호출):
+# Architecture
+Trading State (graphs/trading_state.py)
+TypedDict that flows through the entire LangGraph pipeline. Key fields:
 
-  [AGG] [Polygon Aggregates] API 오류: 403 Client Error: Forbidden for url
-  [NEWS] [Polygon News] API 오류: 404 Client Error: Not Found for url
+base_predictions: LGBM/Chronos prediction results
+analyst_reports: {"technical", "macro", "onchain"} reports
+hypotheses: Bull/Bear scenarios from Hypothesis Agent
+risk_assessment: CVaR, ATR metrics
+final_decision: 0=Buy, 1=Hold, 2=Sell
+episodic_memory: CVRF learning results (profitable_rules, losing_rules)
+Agent Layer (agents/)
+analyst_nodes.py: 3 parallel nodes → node_analyst_technical, node_analyst_macro, node_analyst_onchain
+manager_nodes.py: 3 sequential nodes → node_hypothesis_agent, node_investment_decision, node_final_judgment, node_cvrf_update
+All nodes are pure functions: input TradingState → return dict of fields to update.
 
-  403은 Polygon API 키가 Free Tier라 Aggregates 접근 제한 → rate limit / plan 확인 필요.
-  404는 /v1/news 엔드포인트가 실제 Polygon 문서와 다를 수 있음.
+Graph Builder (graphs/graph_builder.py)
+build_trading_graph() assembles the full LangGraph pipeline with conditional edges:
+
+On-demand inference routing (cache vs re-run)
+Risk-level conditional routing (HIGH risk → Final Judgment with override)
+CVRF update on episode end
+Prompts (prompts/prompt_templates.py)
+System prompts for all 6 agents (analysts + managers + CVRF)
+build_cvrf_rules_str() injects episodic memory into prompts
+build_agent_system_prompt() assembles agent prompt with CVRF rules
+RISK_THRESHOLDS: cvar_max=0.15, atr_multiplier=2.0
+Risk Tools (tools/risk_tools.py)
+calculate_atr(), calculate_cvar(): core risk metrics
+assess_overall_risk(): combines CVaR + ATR into risk_level (HIGH/NORMAL)
+should_trigger_on_demand(): decides when to re-run base predictor (volatility break, signal conflict, uncertainty threshold)
+CVRF (agents/manager_nodes.py - node_cvrf_update)
+Meta-learning node that analyzes portfolio values + trade logs after each episode. Outputs:
+
+new_rules: conceptual patterns to inject into agent prompts
+tau: learning rate (decision overlap between episodes)
+Updates TradingState["current_prompts"] for next episode
+
+
 
   ---
   Pre-fetch + Cache-First 흐름
