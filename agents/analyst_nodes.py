@@ -7,7 +7,7 @@ Analyst Layer -- 3명의 병렬 Analyst 노드 (LangGraph Node 함수)
   - Macro Analyst     -> get_pol_news (BTC/USD 최신 뉴스 마크다운)
   - On-chain Analyst  -> 기존 get_recent_news_yfinance
 
-⚠️ ChatAnthropic 지연 로딩 -- API 키 없으면 Mock JSON 응답 반환
+⚠️ ChatOpenAI 지연 로딩 -- API 키 없으면 Mock JSON 응답 반환
 """
 import os
 from dotenv import load_dotenv
@@ -36,10 +36,10 @@ def _invoke_analyst_llm(
 ) -> str:
     """공통 LLM 호출 헬퍼 — API 키 없으면 Mock JSON 반환"""
     try:
-        from langchain_anthropic import ChatAnthropic
+        from langchain_openai import ChatOpenAI
         from langchain_core.messages import SystemMessage, HumanMessage
-        llm = ChatAnthropic(
-            model="claude-sonnet-4-20250514",
+        llm = ChatOpenAI(
+            model="gpt-4o-mini",
             max_tokens=1024,
             temperature=0.2,
         )
@@ -93,7 +93,7 @@ def node_analyst_technical(state: Dict[str, Any]) -> Dict[str, Any]:
     from_date = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
 
     agg_report: str = get_polygon_aggregates.invoke({
-        "ticker": "C:BTCUSD",
+        "ticker": "X:BTCUSD",
         "from_date": from_date,
         "to_date": to_date,
         "multiplier": 1,
@@ -152,7 +152,7 @@ def node_analyst_macro(state: Dict[str, Any]) -> Dict[str, Any]:
     from_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
 
     news_report: str = get_polygon_news.invoke({
-        "ticker": "C:BTCUSD",
+        "ticker": "X:BTCUSD",
         "from_date": from_date,
         "to_date": to_date,
         "limit": 10,

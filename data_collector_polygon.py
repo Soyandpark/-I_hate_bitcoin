@@ -5,13 +5,13 @@ datasets/ 폴더에 JSON으로 저장한다.
 
 Usage:
   # 전체 기간 수집 (실제 API 키 필요)
-  python data_collector_polygon.py --start 2024-01-01 --end 2025-01-01
+  python data_collector_polygon.py --start 2025-01-01 --end 2026-01-01
 
   # Aggregates만 수집
-  python data_collector_polygon.py --start 2024-01-01 --end 2025-01-01 --type agg
+  python data_collector_polygon.py --start 2025-01-01 --end 2026-01-01 --type agg
 
   # News만 수집
-  python data_collector_polygon.py --start 2024-01-01 --end 2025-01-01 --type news
+  python data_collector_polygon.py --start 2025-01-01 --end 2026-01-01 --type news
 
   # 자동 생성 (datasets/에서 가장 오래된 ~ 가장 최신 파일 자동 감지)
   python data_collector_polygon.py --auto
@@ -32,7 +32,7 @@ DATA_DIR.mkdir(exist_ok=True)
 POLYGON_API_KEY = os.getenv("POLYGON_API_KEY", "")
 POLYGON_BASE_V2 = "https://api.polygon.io/v2"
 POLYGON_BASE_V1 = "https://api.polygon.io/v1"
-TICKER = "C:BTCUSD"
+TICKER = "X:BTCUSD"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1) Raw API Fetchers
@@ -72,7 +72,7 @@ def _paginate_aggregates(
             results_all.extend(bars)
             print(f"  {current.strftime('%Y-%m-%d')} ~ {batch_end.strftime('%Y-%m-%d')}: "
                   f"{len(bars)} bars (total: {len(results_all)})")
-            time.sleep(0.2)  # rate limit 방지
+            time.sleep(12)  # rate limit 방지
         except Exception as e:
             print(f"  [WARN] Batch fetch 실패: {e}")
         current = batch_end + timedelta(seconds=1)
@@ -94,14 +94,15 @@ def _paginate_news(
 
     results_all: List[Dict] = []
     cursor = None
-    max_pages = 20
+    max_pages = 300  # 과거 뉴스 수집을 위해 증가
     page = 0
 
     while page < max_pages:
         params = {
-            "ticker": ticker,
+            # Polygon v2 reference/news에서 ticker 필터는 빈 결과를 반환할 수 있음
+            # "ticker": ticker,
             "limit": limit_per_page,
-            "order": "asc",
+            "order": "desc",
             "sort": "published_utc",
             "apiKey": POLYGON_API_KEY,
         }
@@ -109,7 +110,7 @@ def _paginate_news(
             params["cursor"] = cursor
 
         try:
-            resp = requests.get(f"{POLYGON_BASE_V1}/news", params=params, timeout=30)
+            resp = requests.get(f"{POLYGON_BASE_V2}/reference/news", params=params, timeout=30)
             resp.raise_for_status()
             data = resp.json()
             items = data.get("results", [])
@@ -136,7 +137,7 @@ def _paginate_news(
                 break
 
             print(f"  page {page+1}: {len(items)} items, {len(filtered)} in range (total: {len(results_all)})")
-            time.sleep(0.2)
+            time.sleep(12)
             page += 1
 
         except Exception as e:
@@ -234,8 +235,8 @@ def _ts_to_date(ts_ms: int) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="Polygon.io 데이터 Pre-fetch")
-    parser.add_argument("--start", default="2024-01-01", help="시작일 YYYY-MM-DD")
-    parser.add_argument("--end",   default="2025-01-01", help="종료일 YYYY-MM-DD")
+    parser.add_argument("--start", default="2025-01-01", help="시작일 YYYY-MM-DD")
+    parser.add_argument("--end",   default="2026-01-01", help="종료일 YYYY-MM-DD")
     parser.add_argument("--type",  default="all",
                         choices=["all", "agg", "news"],
                         help="수집 타입: all / agg / news")

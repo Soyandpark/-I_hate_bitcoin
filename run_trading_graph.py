@@ -68,8 +68,8 @@ def generate_mock_ohlcv(n_bars: int = 200, base_price: float = 65_000) -> pd.Dat
 def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """ta 라이브러리로 기술지표 추가"""
     from ta.volatility import BollingerBands, AverageTrueRange
-    from ta.momentum import RSIIndicator, MACDIndicator, StochasticOscillator
-    from ta.trend import CCIIndicator, ADXIndicator
+    from ta.momentum import RSIIndicator, StochasticOscillator
+    from ta.trend import CCIIndicator, ADXIndicator, MACD
 
     df = df.copy()
 
@@ -87,7 +87,7 @@ def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["rsi_14"] = rsi.rsi()
 
     # MACD
-    macd = MACDIndicator(df["close"])
+    macd = MACD(df["close"])
     df["macd"] = macd.macd()
     df["macds"] = macd.macd_signal()
     df["macdh"] = macd.macd_diff()
@@ -319,6 +319,18 @@ def run_single_episode(
         graph = build_trading_graph()
         state = graph.invoke(state)
 
+    risk = state.get("risk_assessment", {})
+    return {
+        "episode_id": episode_id,
+        "final_decision": state.get("final_decision", 1),
+        "position_weight": state.get("position_weight", 0.5),
+        "risk_assessment": risk,
+        "analyst_reports": state.get("analyst_reports", {}),
+        "hypotheses": state.get("hypotheses", ""),
+        "state": state,
+        "duration_sec": time.time() - _t0,
+    }
+
     # ══════════════════════════════════════════════════════════════════════════════
 # Helpers: Analyst Reasoning Logs
 # ══════════════════════════════════════════════════════════════════════════════
@@ -362,19 +374,6 @@ def _report_final(state: TradingState) -> None:
     weight = state.get("position_weight", 0.5)
     reasoning = risk.get("final_reasoning", "(미확인)")
     log_final_decision(action, weight, reasoning, risk)
-
-    risk = state.get("risk_assessment", {})
-
-    return {
-        "episode_id": episode_id,
-        "final_decision": state.get("final_decision", 1),
-        "position_weight": state.get("position_weight", 0.5),
-        "risk_assessment": risk,
-        "analyst_reports": state.get("analyst_reports", {}),
-        "hypotheses": state.get("hypotheses", ""),
-        "state": state,
-        "duration_sec": time.time() - _t0,
-    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════

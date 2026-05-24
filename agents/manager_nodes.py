@@ -6,7 +6,7 @@ Manager Layer -- 3단계 순차 에이전트 노드 (LangGraph Node 함수)
 
 각 노드는 TradingState를 입력받아 수정할 필드만 반환하는 순수 함수이다.
 
-⚠️ ChatAnthropic은 지연 로딩(lazy init) -- API 키 없으면 Mock 응답 반환
+⚠️ ChatOpenAI는 지연 로딩(lazy init) -- API 키 없으면 Mock 응답 반환
 """
 import os
 from dotenv import load_dotenv
@@ -34,15 +34,15 @@ from tools.risk_tools import (
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Shared LLM helper (지연 로딩 — ANTHROPIC_API_KEY 없을 시 Mock 반환)
+# Shared LLM helper (지연 로딩 — OPENAI_API_KEY 없을 시 Mock 반환)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _get_llm():
-    """ChatAnthropic LLM 반환 (lazy init — API 키 없으면 ImportError 방지)"""
-    from langchain_anthropic import ChatAnthropic
+    """ChatOpenAI LLM 반환 (lazy init — API 키 없으면 ImportError 방지)"""
+    from langchain_openai import ChatOpenAI
     from langchain_core.messages import SystemMessage, HumanMessage
-    return ChatAnthropic(
-        model="claude-sonnet-4-20250514",
+    return ChatOpenAI(
+        model="gpt-4o-mini",
         max_tokens=1024,
         temperature=0.2,
     )

@@ -26,7 +26,7 @@ from langchain_core.tools import tool
 POLYGON_API_KEY  = os.getenv("POLYGON_API_KEY", "")
 POLYGON_BASE_V2  = "https://api.polygon.io/v2"
 POLYGON_BASE_V1  = "https://api.polygon.io/v1"
-TICKER           = "C:BTCUSD"
+TICKER           = "X:BTCUSD"
 USE_LOCAL_CACHE  = os.getenv("USE_LOCAL_CACHE", "1") == "1"
 DATA_DIR         = os.path.join(os.path.dirname(__file__), "..", "datasets")
 
@@ -201,7 +201,7 @@ def _parse_news_to_md(data: dict, limit: int = 10) -> str:
 
 @tool
 def get_polygon_aggregates(
-    ticker: str = "C:BTCUSD",
+    ticker: str = "X:BTCUSD",
     from_date: str = "2024-01-01",
     to_date: str = "2025-01-01",
     multiplier: int = 1,
@@ -272,9 +272,9 @@ def get_polygon_aggregates(
 
 @tool
 def get_polygon_news(
-    ticker: str = "C:BTCUSD",
-    from_date: str = "2024-01-01",
-    to_date: str = "2025-01-01",
+    ticker: str = "X:BTCUSD",
+    from_date: str = "2025-01-01",
+    to_date: str = "2026-01-01",
     limit: int = 10,
     order: str = "desc",
 ) -> str:
