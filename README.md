@@ -52,7 +52,9 @@ agents/manager_nodes.py and agents/analyst_nodes.py use lazy loading for ChatAnt
 
 # 문제점
 (1) 현재 json 파일 변환 및 바로 모델에 입력해주고자 했으나(chronos, lgbm)  이 부분은 코드 변경이 더 필요함.(run_trading_graph.py)
-(2) 로컬에서 polygon api key(free) 가져와서 data collector polygon.py 실행하면 json 실행되나 rolling window가 최대 2년까지이고 maxPage를 늘려서 시간 소모가 매우 오래 걸림 (time.sleep(12) - api 제한?) datasets/ 에 crawling X:BTCUSD만 조회하면 바로 저장되진 않았음(2026년 5월임에도)
+(2) 로컬에서 polygon api key(free) 가져와서 data collector polygon.py 실행하면 json 실행되나 rolling window가 최대 2년까지이고 maxPage를 늘려서 시간 소모가 매우 오래 걸림 (time.sleep(12) - api 제한?) datasets/ 에 crawling X:BTCUSD만 조회하면 0개 조회되는 오류가 있는데 종목 없앴더니 또 있음?(2026년 5.21.)
+<img width="2524" height="1556" alt="image" src="https://github.com/user-attachments/assets/6af01988-2a6b-4dae-a022-4da7f5db5b9e" />
+
 다른 자잘한 종목들이 조회되긴 함(GOOGL등)
 
 그래서 사실 사용하려면 조회한다음에 bitcoin 들어간 단어를 찾아야 할 거 같은데...ㅠㅠㅠㅠ
