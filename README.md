@@ -1,8 +1,10 @@
-# I_Hate_BitCoin
-
-BTC/USDT 1시간봉 기반 3-class 분류 트레이딩 시스템
+# I_Hate_BitCoin_ BTC/USDT 1시간봉 기반 3-class 분류  with agent , graph, tools
+Technical Analyst → get_polygon_aggregates (1시간봉 + 마크다운)
+Macro Analyst → get_polygon_news (BTC/USD 최신 뉴스)
+On-chain Analyst → get_recent_news_yfinance (yfinance로)
 
 핵심 변경 사항은 agent 폴더, tools 폴더
+
 (1) 현재 json 파일 변환 및 바로 모델에 입력해주고자 했으나(chronos, lgbm)  이 부분은 코드 변경이 더 필요함.(run_trading_graph.py)
 (2) 로컬에서 polygon api key(free) 가져와서 data collector polygon.py 실행하면 json 실행되나 rolling window가 최대 2년까지이고 maxPage를 늘려서 시간 소모가 매우 오래 걸림 (time.sleep(12) - api 제한?) datasets/ 에 crawling X:BTCUSD만 조회하면 바로 저장되진 않았음(2026년 5월임에도)
 다른 자잘한 종목들이 조회되긴 함(GOOGL등)
