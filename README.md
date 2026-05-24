@@ -1,98 +1,192 @@
 # I_Hate_BitCoin
 
-BTC/USDT 1시간봉 기반 3-class 분류 트레이딩 시스템.
-GBT 모델(LightGBM, XGBoost, CatBoost)이 매 시점마다 Buy/Hold/Sell 행동을 결정하고, TTA(Test-Time Adaptation라고 부르지만은...실질적으로 online learning)로 월별 재학습한다.
+BTC/USDT 1시간봉 기반 3-class 분류 트레이딩 시스템 변경 사항
 
-## Quick Start
 
-### 1. 환경 설정
+Project Overview
+BTC/USDT 1-hour trading system with a dual-layer LangGraph agent architecture:
 
-```bash
-# 저장소 클론
-git clone https://github.com/Gaebalja626/I_Hate_BitCoin.git
-cd I_Hate_BitCoin
+Analyst Layer (parallel): Technical, Macro, On-chain analysts
+Manager Layer (sequential): Hypothesis → Investment Decision → Final Judgment
+CVRF (meta-learning): Updates agent prompts after each episode based on trading outcomes
+Common Commands
+# Smoke test (no LLM calls)
+python smoke_test.py
 
-# (권장) conda 환경 생성
-conda create -n btc python=3.10 -y
-conda activate btc
+# Run the full trading graph
+python run_trading_graph.py
 
-# 패키지 설치
-pip install -r requirements.txt
-```
+# ML experiments (from README)
+python experiments/run_model_compare.py   # 6-model comparison
+python experiments/run_xgb_optuna.py     # Optuna tuning
+python experiments/run_ensemble.py        # Ensemble top 3
+python experiments/run_ablation_tta.py     # TTA ablation study
+python experiments/run_xgb_visualize.py   # Trading visualization
 
-### 2. 데이터 수집
+# Data collection (auto-runs on first experiment)
+python data_collector.py
+Architecture
+Trading State (graphs/trading_state.py)
+TypedDict that flows through the entire LangGraph pipeline. Key fields:
 
-첫 실행 시 자동으로 `datasets/` 폴더에 OHLCV 데이터를 다운로드한다.
-인터넷 연결이 필요하며, ccxt를 통해 Binance에서 가져온다.
+base_predictions: LGBM/Chronos prediction results
+analyst_reports: {"technical", "macro", "onchain"} reports
+hypotheses: Bull/Bear scenarios from Hypothesis Agent
+risk_assessment: CVaR, ATR metrics
+final_decision: 0=Buy, 1=Hold, 2=Sell
+episodic_memory: CVRF learning results (profitable_rules, losing_rules)
+Agent Layer (agents/)
+analyst_nodes.py: 3 parallel nodes → node_analyst_technical, node_analyst_macro, node_analyst_onchain
+manager_nodes.py: 3 sequential nodes → node_hypothesis_agent, node_investment_decision, node_final_judgment, node_cvrf_update
+All nodes are pure functions: input TradingState → return dict of fields to update.
 
-### 3. 실험 실행
+Graph Builder (graphs/graph_builder.py)
+build_trading_graph() assembles the full LangGraph pipeline with conditional edges:
 
-```bash
-# 6개 모델 비교 (LGBM/XGB/CatBoost × base/tuned)
-python experiments/run_model_compare.py
+On-demand inference routing (cache vs re-run)
+Risk-level conditional routing (HIGH risk → Final Judgment with override)
+CVRF update on episode end
+Prompts (prompts/prompt_templates.py)
+System prompts for all 6 agents (analysts + managers + CVRF)
+build_cvrf_rules_str() injects episodic memory into prompts
+build_agent_system_prompt() assembles agent prompt with CVRF rules
+RISK_THRESHOLDS: cvar_max=0.15, atr_multiplier=2.0
+Risk Tools (tools/risk_tools.py)
+calculate_atr(), calculate_cvar(): core risk metrics
+assess_overall_risk(): combines CVaR + ATR into risk_level (HIGH/NORMAL)
+should_trigger_on_demand(): decides when to re-run base predictor (volatility break, signal conflict, uncertainty threshold)
+CVRF (agents/manager_nodes.py - node_cvrf_update)
+Meta-learning node that analyzes portfolio values + trade logs after each episode. Outputs:
 
-# XGBoost Optuna 튜닝 (50 trials)
-python experiments/run_xgb_optuna.py
+new_rules: conceptual patterns to inject into agent prompts
+tau: learning rate (decision overlap between episodes)
+Updates TradingState["current_prompts"] for next episode
+Mock LLM Responses
+agents/manager_nodes.py and agents/analyst_nodes.py use lazy loading for ChatAnthropic. If ANTHROPIC_API_KEY is not set, they return mock JSON responses — allowing local testing without API access.
 
-# 앙상블 (top 3 모델)
-python experiments/run_ensemble.py
+Key Concepts
+Term	Description
+3-class	Buy(0)/Hold(1)/Sell(2) classification
+LA (Lookahead)	Label generation lookahead period (default 6 hours)
+DZ (Dead Zone)	Returns within ±DZ classified as Hold
+TTA	Re-training every ~720 hours (30 days)
+CVRF	Conceptual Verbal Reinforcement — episode-based prompt meta-learning
+Dependencies
+Key packages in requirements.txt:
 
-# TTA ablation study
-python experiments/run_ablation_tta.py
+ccxt==4.2.29 — Binance data collection
+lightgbm==4.6.0, xgboost==2.0.3, catboost==1.2.7 — ML models
+langgraph — agent orchestration
+langchain-anthropic — LLM calls (lazy import)
 
-# XGBoost 매매 시각화
-python experiments/run_xgb_visualize.py
+     agents/analyst_nodes.py의 Technical Analyst와 Macro Analyst가 각각 get_polygon_aggregates, get_polygon_news를 호출한다. 현재는 매 호출마다 live Polygon REST API를 호출하므로:
+     - 백테스트 중 반복 API 호출 → 속도 느림 + API rate limit 위험
+     - API 키 없을 때 실패 → 백테스트 불가
 
-# XGBoost 행동 분석
-python experiments/run_xgb_behavior_analysis.py
-```
+     해결: Pre-fetch로 datasets/에 과거 데이터를 저장하고, Tool은 로컬 파일优先으로 읽도록 변경.
 
-결과는 `results/` 폴더에 실험별 디렉토리로 저장된다.
+     ---
+     Implementation Plan
 
-## 프로젝트 구조
+     1. data_collector_polygon.py (신규)
 
-```
-├── config.py                # 하이퍼파라미터, 데이터 설정
-├── data_collector.py        # Binance OHLCV 수집 (ccxt)
-├── feature_engineer.py      # 기술지표 + 파생 피처 생성
-├── fetch_extra_features.py  # Fear & Greed, Funding Rate
-├── backtester.py            # 3-action 백테스터 (수수료 포함)
-├── experiment.py            # 실험 디렉토리 생성/관리
-├── models/
-│   └── lgbm_model.py        # LightGBM 학습/예측
-├── experiments/
-│   ├── run_model_compare.py       # 6모델 비교
-│   ├── run_xgb_optuna.py         # Optuna 튜닝
-│   ├── run_ensemble.py            # 앙상블
-│   ├── run_ablation_tta.py        # TTA ablation
-│   ├── run_xgb_visualize.py       # 매매 시각화
-│   ├── run_xgb_behavior_analysis.py # 행동 분석
-│   └── ...
-├── reports/                 # 분석 보고서 (.md)
-├── datasets/                # OHLCV 캐시 (gitignore)
-├── results/                 # 실험 결과 (gitignore)
-└── trained_models/          # 저장된 모델 (gitignore)
-```
+     Pre-fetch 전용 모듈. 기존 data_collector.py의 load_or_fetch 패턴을 그대로 따름.
 
-## 핵심 개념
+     # 저장 구조
+     datasets/
+     ├── btc_polygon_1h_2024-01-01_2025-01-01.json   ← Aggregates
+     └── btc_polygon_news_2024-01-01_2025-01-01.json  ← Financial News
 
-| 용어 | 설명 |
-|------|------|
-| **3-class** | Buy(0) / Hold(1) / Sell(2) — 모델이 매 시간 행동 결정 |
-| **LA (Lookahead)** | 라벨 생성 시 미래 참조 기간 (기본 24시간) |
-| **DZ (Dead Zone)** | 수익률 ±DZ 이내면 Hold로 분류 (기본 1%) |
-| **TTA** | 720시간(≈30일)마다 expanding window로 재학습 |
-| **OOS** | Out-of-Sample — 2024\~2025, 2025\~2026 구간 |
+     핵심 함수:
+     - fetch_polygon_aggregates_batch() — 배치로 기간 분할 요청 (5000개 제한 대응)
+     - fetch_polygon_news_batch() — 뉴스 폴링, cursor 기반 페이지네이션
+     - save_aggregates_cache() — JSONlines 또는 단일 JSON 파일로 저장
+     - load_aggregates_cache() — 백테스트 중 Tool이 호출
+     - save_news_cache() / load_news_cache()
+     - ensure_polygon_data() — 있으면 로드, 없으면 자동 fetch 후 저장
 
-## 주요 결과
+     2. tools/polygon_tools.py (수정)
 
-- **LGBM base가 최고 성능**: 2024\~2025 +58.68%, 2025\~2026 −1.51%
-- **TTA 필수**: TTA 없으면 2025\~2026에서 −22% → TTA 있으면 −1.5%
-- **튜닝 역설**: 복잡한 모델일수록 과적합 → base 파라미터가 최적
-- **앙상블 한계**: 같은 피처/라벨의 GBT 모델은 다양성 부족으로 앙상블 효과 미미
+     Tool 함수 내부에 Cache-First 전략 추가:
 
-## 참고
+     Tool 호출
+       └→ local cache 파일 존재? ─Yes→ 로컬 JSON 로드 → 마크다운 파싱 → 반환
+                                └→ No → live API 호출 → 응답 JSON 저장 → 마크다운 파싱 → 반환
 
-- Python 3.10+ 권장
-- SSL 인증서 오류 시 `certifi` 패키지 경로를 config에서 수정
-- Binance API 접근이 차단된 환경에서는 VPN 필요
+     구체 로직:
+     def _get_aggregates_cache_path(from_date, to_date, ticker):
+         return os.path.join("datasets", f"polygon_agg_{ticker}_{from_date}_{to_date}.json")
+
+     def _load_from_cache(path):
+         if os.path.exists(path):
+             with open(path) as f: return json.load(f)
+         return None
+
+     USE_LOCAL_CACHE 환경변수(default True)로 live API 폴백 제어.
+
+     ---
+     Files to Modify/Create
+
+     ┌───────────────────────────┬───────────────────────────────────────┐
+     │           파일            │                 작업                  │
+     ├───────────────────────────┼───────────────────────────────────────┤
+     │ data_collector_polygon.py │ 신규 — Polygon pre-fetch 수집기       │
+     ├───────────────────────────┼───────────────────────────────────────┤
+     │ tools/polygon_tools.py    │ 수정 — Cache-First 로직 주입          │
+     ├───────────────────────────┼───────────────────────────────────────┤
+     │ datasets/                 │ 저장 디렉토리 (gitignore에 이미 등록) │
+     ├───────────────────────────┼───────────────────────────────────────┤
+     │ api_connection.txt        │ Polygon API 엔드포인트 문서 (참고용)  │
+     └───────────────────────────┴───────────────────────────────────────┘
+
+     ---
+     Reuse Existing Patterns
+
+     - data_collector.py의 load_or_fetch → CSV 캐시 패턴 참고
+     - config.py의 DATA_DIR = "datasets" 재활용
+     - _parse_aggregates_to_md() / _parse_news_to_md() — 기존 파서 그대로 활용 (변경 없음)
+
+     ---
+     Verification
+
+     # 1) Pre-fetch 실행 (실제 API 키 필요)
+     python data_collector_polygon.py --start 2024-01-01 --end 2025-01-01
+
+     # 2) Tool이 로컬 캐시에서 읽는지 확인 (API 키 없이)
+     export POLYGON_API_KEY=  # 비우기
+     python -c "
+     from tools.polygon_tools import get_polygon_aggregates, get_polygon_news
+     print(get_polygon_aggregates.invoke({'from_date':'2024-01-01','to_date':'2024-01-03'}))
+     "
+
+     # 3) 백테스트 실행
+     python run_trading_graph.py --dry-run
+
+     Tool 출력 로그에서 🔧 Tool: get_polygon_aggregates 결과 확인 → 로컬 캐시 읽으면 [CACHE HIT] 태그 표시.
+
+  변경 요약
+
+  모든 에이전트/툴 모듈에 load_dotenv() 추가:
+
+  agent_nodes, manager_nodes, polygon_tools, data_collector_polygon, run_trading_graph
+    └→ from dotenv import load_dotenv → load_dotenv()
+        └→ .env 읽어서 os.environ["POLYGON_API_KEY"], ["OPENAI_API_KEY"] 자동 주입
+
+  테스트 결과 (실제 API 키로 live 호출):
+
+  [AGG] [Polygon Aggregates] API 오류: 403 Client Error: Forbidden for url
+  [NEWS] [Polygon News] API 오류: 404 Client Error: Not Found for url
+
+  403은 Polygon API 키가 Free Tier라 Aggregates 접근 제한 → rate limit / plan 확인 필요.
+  404는 /v1/news 엔드포인트가 실제 Polygon 문서와 다를 수 있음.
+
+  ---
+  Pre-fetch + Cache-First 흐름
+
+  data_collector_polygon.py --start 2024-01-01 --end 2025-01-01
+      └→ Polygon REST API 호출 → datasets/polygon_agg_*.json 저장
+
+  백테스트 실행 시
+      └→ get_polygon_aggregates.invoke()
+          ├→ datasets/ 캐시 존재? → [CACHE HIT] → 마크다운 반환 (API 호출 0)
+          └→ 캐시 없음 → live API 호출 → 결과 저장 → 마크다운 반환
