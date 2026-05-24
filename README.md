@@ -1,4 +1,12 @@
 # I_Hate_BitCoin_ BTC/USDT 1시간봉 기반 3-class 분류  with agent , graph, tools
+
+
+BTC/USDT 1-hour trading system with a dual-layer LangGraph agent architecture:
+
+Analyst Layer (parallel): Technical, Macro, On-chain analysts
+Manager Layer (sequential): Hypothesis → Investment Decision → Final Judgment
+CVRF (meta-learning): Updates agent prompts after each episode based on trading outcome
+
 Technical Analyst → get_polygon_aggregates (1시간봉 + 마크다운)
 Macro Analyst → get_polygon_news (BTC/USD 최신 뉴스)
 On-chain Analyst → get_recent_news_yfinance (yfinance로)
@@ -13,14 +21,7 @@ On-chain Analyst → get_recent_news_yfinance (yfinance로)
 tools구조랑 외부 api 가져오는 agent 는 구현되긴 했어요...
 
 aggregates랑 news 두 개를 제공, news -> json하고 agent가 dry run 안하면 json 참조해 판단에 사용(tools) 후 판단 결과를 제공함.(run_trading_graph.py) (trading agent 형태)
-
-Project Overview
-BTC/USDT 1-hour trading system with a dual-layer LangGraph agent architecture:
-
-Analyst Layer (parallel): Technical, Macro, On-chain analysts
-Manager Layer (sequential): Hypothesis → Investment Decision → Final Judgment
-CVRF (meta-learning): Updates agent prompts after each episode based on trading outcomes
-Common Commands
+# Common Commands
 # Smoke test (no LLM calls)
 python smoke_test.py
 
